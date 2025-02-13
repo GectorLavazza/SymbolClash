@@ -9,7 +9,7 @@ MOVES_COLORS = {0: 2,
                 4: 3,
                 5: 7,
                 6: 3}
-CHOOSE_MESSAGE = f'Choose from: '
+CHOOSE_MESSAGE = f'Choose your action: '
 
 
 class Player:
@@ -28,14 +28,17 @@ class Player:
         self.poison_time = 5
         self.dodged_dmg = 2
 
+        self.until_shield = 0
+
     def take_turn(self, stdscr):
-        stdscr.addstr(6, 0, CHOOSE_MESSAGE)
+        stdscr.addstr(5, 0, CHOOSE_MESSAGE)
         offset = 0
         for i in range(len(MOVES)):
             move = MOVES[i]
             add = ' | ' if i < len(MOVES) - 1 else ''
-            stdscr.addstr(6, len(CHOOSE_MESSAGE) + offset, move.swapcase(), curses.color_pair(MOVES_COLORS[1]))
-            stdscr.addstr(6, len(CHOOSE_MESSAGE) + offset + len(move), add, curses.color_pair(MOVES_COLORS[1]))
+            c = 0 if move == 'shield' and self.until_shield else 1
+            stdscr.addstr(6, offset, move.swapcase(), curses.color_pair(MOVES_COLORS[c]))
+            stdscr.addstr(6, offset + len(move), add, curses.color_pair(1))
             offset += len(move) + 3
         stdscr.refresh()
 
@@ -43,40 +46,45 @@ class Player:
         cursor_x = 0
 
         while True:
-            key = stdscr.getch(7, cursor_x)
+            key = stdscr.getch(8, cursor_x)
 
             if key in [curses.KEY_ENTER, 10, 13]:
+                stdscr.addstr(10, 0, " " * 100)
                 move_str = ''.join(move).lower()
+                valid = True
                 if move_str in MOVES:
                     if move_str == 'fire' and self.energy - 3 < 0 or move_str == 'poison' and self.energy - 1 < 0 \
                             or move_str == 'heal' and self.energy - 2 < 0:
-                        stdscr.addstr(8, 0, 'Not enough energy! Try again.', curses.color_pair(2))
-                        stdscr.refresh()
-                        move.clear()
-                        cursor_x = 0
-                        stdscr.addstr(7, 0, " " * 20)
-                        stdscr.move(7, 0)
-                        continue
-                    break
+                        msg = 'Not enough energy!'
+                        valid = False
+                    elif move_str == 'shield' and self.until_shield:
+                        msg = f'You will be able to use shield again in {self.until_shield} turns.'
+                        valid = False
                 else:
-                    stdscr.addstr(8, 0, 'Invalid move! Try again.', curses.color_pair(2))
+                    msg = 'Invalid action!'
+                    valid = False
+
+                if not valid:
+                    stdscr.addstr(10, 0, " " * 100)
+                    stdscr.addstr(10, 0, msg, curses.color_pair(2))
                     stdscr.refresh()
                     move.clear()
                     cursor_x = 0
-                    stdscr.addstr(7, 0, " " * 20)
-                    stdscr.move(7, 0)
+                    stdscr.addstr(8, 0, " " * 100)
+                    stdscr.move(8, 0)
                     continue
+                break
 
             elif key in [curses.KEY_BACKSPACE, 127]:
                 if move:
                     move.pop()
                     cursor_x -= 1
-                    stdscr.addstr(7, cursor_x, " ")
-                    stdscr.move(7, cursor_x)
+                    stdscr.addstr(8, cursor_x, " ")
+                    stdscr.move(8, cursor_x)
 
             elif 32 <= key <= 126:
                 move.append(chr(key))
-                stdscr.addstr(7, cursor_x, chr(key))
+                stdscr.addstr(8, cursor_x, chr(key))
                 cursor_x += 1
 
             stdscr.refresh()
@@ -102,6 +110,9 @@ class Player:
                     self.effects.pop('poison')
 
     def play(self):
+        self.until_shield = max(0, self.until_shield - 1)
+        if self.move == 'shield':
+            self.until_shield = 2
         if self.enemy.move == 'sword':
             if self.move != 'shield':
                 if self.move == 'dodge':
@@ -145,10 +156,6 @@ class Enemy(Player):
         elif self.enemy.history.count('cleanse') == max(amounts):
             sw, sh, f, d, h, p, c = 10, 5, 5, 6, 7, 5, 5
 
-        if 'fire' in self.enemy.history[-2:] or 'poison' in self.enemy.history[-2:]:
-            c = min(10, c + 2)
-            h = min(10, c + 1)
-
         if self.enemy.energy < 3:
             sw = min(10, sw + 2)
 
@@ -160,22 +167,32 @@ class Enemy(Player):
             d = min(10, c + 1)
             sh = min(10, c + 2)
 
-        if self.enemy.history.count('sword') > 10:
-            sh = min(10, c + 2)
+        if self.enemy.history.count('sword') > 4:
+            sh = min(10, sh + 1)
+
+        if self.enemy.health < 25:
+            sw = min(10, sw + 2)
+            p = min(10, p + 2)
+            f = min(10, c + 2)
 
         if self.health < 15:
-            sh = 9
-            h = 10
-            c = 8
-            d = f = p = sw = 4
+            sh = min(10, sh + 2)
+            h = min(10, h + 3)
+            c = min(10, c + 2)
+            d = max(1, d - 2)
+            sw = max(1, sw - 2)
+            p = max(1, p - 2)
+            f = max(1, f - 2)
 
         if self.enemy.health < 10:
             sw = 10
 
-        if self.enemy.health < 25:
-            sw = 8
-            p = 8
-            f = 8
+        if self.enemy.until_shield:
+            sw = min(10, sw + 1)
+
+        if 'fire' in self.enemy.history[-2:] or 'poison' in self.enemy.history[-2:]:
+            c = min(10, c + 2)
+            h = min(10, c + 1)
 
         if 'fire' in self.enemy.effects.keys():
             f = max(1, f - 2)
@@ -184,6 +201,9 @@ class Enemy(Player):
 
         if not self.effects.keys():
             c = 0
+
+        if self.enemy.history.count('poison') + self.enemy.history.count('fire') > 4:
+            c = min(10, c + 1)
 
         weights = (sw, sh, f, d, h, p, c)
 
@@ -226,11 +246,13 @@ def main(stdscr):
             enemy.enemy = player
             stdscr.addstr(10, 0, 'Press any key to restart...')
         else:
-            player_fx = ' | '.join([f'{i[0].capitalize()}: {i[1]}' for i in player.effects.items()])
-            enemy_fx = ' | '.join([f'{i[0].capitalize()}: {i[1]}' for i in enemy.effects.items()])
-            stdscr.addstr(0, 0, f'You: Health {player.health} | Energy {player.energy} | '
+            player_fx = ' | '.join([f'{i[0].capitalize().ljust(6, " ")} {i[1]}' for i in player.effects.items()])
+            enemy_fx = ' | '.join([f'{i[0].capitalize().ljust(6, " ")} {i[1]}' for i in enemy.effects.items()])
+            stdscr.addstr(0, 0, f'You   | Hp {str(player.health).rjust(3, " ")} '
+                                f'| Energy {str(player.energy).rjust(2, " ")} | '
                                 f'{player_fx}', curses.color_pair(1))
-            stdscr.addstr(1, 0, f'Enemy: Health {enemy.health} | {enemy_fx}', curses.color_pair(4))
+            stdscr.addstr(1, 0, f'Enemy | Hp {str(enemy.health).rjust(3, " ")} |           '
+                                f'| {enemy_fx}', curses.color_pair(4))
 
             player.take_turn(stdscr)
             enemy.take_turn()
@@ -244,11 +266,11 @@ def main(stdscr):
             player_msg = f'You played {player.move.swapcase()}!'
             enemy_msg = f'Enemy played {enemy.move.swapcase()}!'
 
-            stdscr.addstr(9, 0, player_msg, curses.color_pair(1))
-            stdscr.addstr(9, len(player_msg), ' | ')
-            stdscr.addstr(9, len(player_msg) + 3, enemy_msg, curses.color_pair(4))
+            stdscr.addstr(10, 0, player_msg, curses.color_pair(1))
+            stdscr.addstr(10, len(player_msg), ' | ')
+            stdscr.addstr(10, len(player_msg) + 3, enemy_msg, curses.color_pair(4))
 
-            stdscr.addstr(10, 0, 'Press any key to continue...')
+            stdscr.addstr(11, 0, 'Press any key to continue...')
 
         stdscr.refresh()
         stdscr.getch()
