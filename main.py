@@ -145,11 +145,6 @@ class Enemy(Player):
         elif self.enemy.history.count('cleanse') == max(amounts):
             sw, sh, f, d, h, p, c = 10, 5, 5, 6, 7, 5, 5
 
-        if 'fire' in self.enemy.effects.keys():
-            f = max(1, f - 2)
-        if 'poison' in self.enemy.effects.keys():
-            p = max(1, p - 2)
-
         if 'fire' in self.enemy.history[-2:] or 'poison' in self.enemy.history[-2:]:
             c = min(10, c + 2)
             h = min(10, c + 1)
@@ -157,9 +152,9 @@ class Enemy(Player):
         if self.enemy.energy < 3:
             sw = min(10, sw + 2)
 
-        if self.health < self.health // 2:
+        if self.health < 50:
             h = min(10, c + 2)
-        if self.health < self.health // 4:
+        if self.health < 25:
             c = min(10, c + 1)
             h = min(10, c + 4)
             d = min(10, c + 1)
@@ -176,6 +171,16 @@ class Enemy(Player):
 
         if self.enemy.health < 10:
             sw = 10
+
+        if self.enemy.health < 25:
+            sw = 8
+            p = 8
+            f = 8
+
+        if 'fire' in self.enemy.effects.keys():
+            f = max(1, f - 2)
+        if 'poison' in self.enemy.effects.keys():
+            p = max(1, p - 2)
 
         if not self.effects.keys():
             c = 0
